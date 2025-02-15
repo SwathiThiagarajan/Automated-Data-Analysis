@@ -69,4 +69,4 @@
 
 ### AI-Generated Insights
 
-Error: Received HTML response instead of expected JSON. Status Code: 200
+

@@ -23,7 +23,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 def load_data(filename):
     """Load CSV data into a Pandas DataFrame."""
     try:
-        df = pd.read_csv(filename ,encoding='ISO-8859-1')
+        df = pd.read_csv(filename, encoding='ISO-8859-1')
         print(f"Loaded dataset with {df.shape[0]} rows and {df.shape[1]} columns.")
         return df
     except Exception as e:
@@ -38,25 +38,28 @@ def analyze_data(df):
     return summary, missing_values, correlation_matrix
 
 def generate_visualizations(df):
-    """Generate and save PNG visualizations."""
-    for col in df.select_dtypes(include=[np.number]).columns[:3]:
-        plt.figure(figsize=(6,4))
-        sns.histplot(df[col].dropna(), kde=True)
-        plt.title(f"Distribution of {col}")
-        plt.savefig(f"{col}.png")
+    """Generate and save enhanced PNG visualizations."""
+    for col in df.select_dtypes(include=[np.number]).columns[:5]:
+        plt.figure(figsize=(8,5))
+        sns.histplot(df[col].dropna(), kde=True, bins=30, color="royalblue")
+        plt.title(f"Distribution of {col}", fontsize=14)
+        plt.xlabel(col, fontsize=12)
+        plt.ylabel("Frequency", fontsize=12)
+        plt.grid(True, linestyle="--", alpha=0.6)
+        plt.savefig(f"{col}.png", dpi=300)
         plt.close()
 
-def get_together_ai_response(prompt):
-    """Send prompt to Together AI and return response."""
-    together_api_key = os.getenv("TOGETHER_API_KEY")
-    if not together_api_key:
-        print("Error: TOGETHER_API_KEY not set.")
+def get_openai_response(prompt):
+    """Send prompt to OpenAI and return response, handling both HTML and JSON."""
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        print("Error: OPENAI_API_KEY not set.")
         sys.exit(1)
     
-    url = "https://api.together.ai/playground/chat/meta-llama/Llama-3.3-70B-Instruct-Turbo"
-    headers = {"Authorization": f"Bearer {together_api_key}", "Content-Type": "application/json"}
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {openai_api_key}", "Content-Type": "application/json"}
     data = {
-        "model": "mistral-7b-instruct",
+        "model": "gpt-4o",
         "messages": [
             {"role": "system", "content": "You are a data analyst."},
             {"role": "user", "content": prompt}
@@ -66,28 +69,23 @@ def get_together_ai_response(prompt):
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
     def chat():
         response = requests.post(url, headers=headers, json=data)
-    
-        # Log the response status code and text for debugging
         print(f"Response Status Code: {response.status_code}")
         
-        # Check for HTML response
-        if "html" in response.headers.get('Content-Type', ''):
-            print("Received HTML response, possibly an error page.")
-            return f"Error: Received HTML response instead of expected JSON. Status Code: {response.status_code}"
+        if "text/html" in response.headers.get('Content-Type', ''):
+            print("Received HTML response, extracting text...")
+            return response.text  # Return raw HTML content
         
         if response.status_code == 200:
             try:
                 return response.json()["choices"][0]["message"]["content"]
             except ValueError:
                 print("Error parsing JSON response")
-                print("Response Content:", response.text)  # Log full response content if not JSON
-                raise
+                print("Response Content:", response.text)
+                return response.text  # Fallback to returning raw text
         else:
             raise Exception(f"Error: Received non-200 status code {response.status_code}")
     
     return chat()
-
-
 
 def generate_report(filename, summary, missing_values, correlation_matrix, insights):
     """Create README.md with analysis results."""
@@ -119,7 +117,7 @@ def main():
     - Correlation matrix: {correlation_matrix.to_string()}
     Provide insights as a story."""
     
-    insights = get_together_ai_response(prompt)
+    insights = get_openai_response(prompt)
     generate_report(filename, summary, missing_values, correlation_matrix, insights)
     print("Analysis complete. See README.md and PNG files.")
 
