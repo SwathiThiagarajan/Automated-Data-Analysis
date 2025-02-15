@@ -31,35 +31,53 @@ def load_data(filename):
         sys.exit(1)
 
 def analyze_data(df):
-    """Perform generic analysis: summary, missing values, correlations."""
+    """Perform general data analysis."""
     summary = df.describe(include='all')
     missing_values = df.isnull().sum()
     correlation_matrix = df.corr(numeric_only=True)
     return summary, missing_values, correlation_matrix
 
 def generate_visualizations(df):
-    """Generate and save enhanced PNG visualizations."""
-    for col in df.select_dtypes(include=[np.number]).columns[:5]:
-        plt.figure(figsize=(8,5))
-        sns.histplot(df[col].dropna(), kde=True, bins=30, color="royalblue")
-        plt.title(f"Distribution of {col}", fontsize=14)
-        plt.xlabel(col, fontsize=12)
-        plt.ylabel("Frequency", fontsize=12)
+    """Generate enhanced visualizations."""
+    # Correlation Heatmap
+    plt.figure(figsize=(10, 6))
+    sns.heatmap(df.corr(numeric_only=True), annot=True, cmap='coolwarm', fmt='.2f')
+    plt.title("Feature Correlation Heatmap")
+    plt.savefig("correlation_heatmap.png", dpi=300)
+    plt.close()
+    
+    # Top Rated Books Distribution
+    if 'average_rating' in df.columns:
+        plt.figure(figsize=(8, 5))
+        sns.histplot(df['average_rating'].dropna(), bins=20, kde=True, color='green')
+        plt.title("Distribution of Average Ratings")
+        plt.xlabel("Average Rating")
+        plt.ylabel("Frequency")
         plt.grid(True, linestyle="--", alpha=0.6)
-        plt.savefig(f"{col}.png", dpi=300)
+        plt.savefig("rating_distribution.png", dpi=300)
         plt.close()
+    
+        for col in df.select_dtypes(include=[np.number]).columns[:5]:
+            plt.figure(figsize=(8,5))
+            sns.histplot(df[col].dropna(), kde=True, bins=30, color="royalblue")
+            plt.title(f"Distribution of {col}", fontsize=14)
+            plt.xlabel(col, fontsize=12)
+            plt.ylabel("Frequency", fontsize=12)
+            plt.grid(True, linestyle="--", alpha=0.6)
+            plt.savefig(f"{col}.png", dpi=300)
+            plt.close()
 
 def get_openai_response(prompt):
-    """Send prompt to OpenAI and return response, handling both HTML and JSON."""
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        print("Error: OPENAI_API_KEY not set.")
+    """Send a prompt to OpenAI for AI-driven insights."""
+    ai_proxy_token = os.getenv("AIPROXY_TOKEN")
+    if not ai_proxy_token:
+        print("Error: AIPROXY_TOKEN not set.")
         sys.exit(1)
     
     url = "https://api.openai.com/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {openai_api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {ai_proxy_token}", "Content-Type": "application/json"}
     data = {
-        "model": "gpt-4o",
+        "model": "gpt-4o-mini",
         "messages": [
             {"role": "system", "content": "You are a data analyst."},
             {"role": "user", "content": prompt}
@@ -69,21 +87,10 @@ def get_openai_response(prompt):
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
     def chat():
         response = requests.post(url, headers=headers, json=data)
-        print(f"Response Status Code: {response.status_code}")
-        
-        if "text/html" in response.headers.get('Content-Type', ''):
-            print("Received HTML response, extracting text...")
-            return response.text  # Return raw HTML content
-        
         if response.status_code == 200:
-            try:
-                return response.json()["choices"][0]["message"]["content"]
-            except ValueError:
-                print("Error parsing JSON response")
-                print("Response Content:", response.text)
-                return response.text  # Fallback to returning raw text
+            return response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
         else:
-            raise Exception(f"Error: Received non-200 status code {response.status_code}")
+            raise Exception(f"API Error: {response.status_code}")
     
     return chat()
 
@@ -100,6 +107,9 @@ def generate_report(filename, summary, missing_values, correlation_matrix, insig
         f.write(correlation_matrix.to_markdown() + "\n\n")
         f.write("### AI-Generated Insights\n\n")
         f.write(insights + "\n")
+        f.write("### Visualizations\n\n")
+        f.write("![Correlation Heatmap](correlation_heatmap.png)\n")
+        
 
 def main():
     if len(sys.argv) != 2:
@@ -111,15 +121,10 @@ def main():
     summary, missing_values, correlation_matrix = analyze_data(df)
     generate_visualizations(df)
     
-    prompt = f"""Analyze the following dataset:
-    - Summary: {summary.to_string()}
-    - Missing values: {missing_values.to_string()}
-    - Correlation matrix: {correlation_matrix.to_string()}
-    Provide insights as a story."""
-    
+    prompt = f"""Analyze the dataset:\n- Summary: {summary.to_string()}\n- Missing values: {missing_values.to_string()}\n- Correlation matrix: {correlation_matrix.to_string()}\nProvide insights as a story."""
     insights = get_openai_response(prompt)
     generate_report(filename, summary, missing_values, correlation_matrix, insights)
-    print("Analysis complete. See README.md and PNG files.")
+    print("Analysis complete. Check README.md and PNG files.")
 
 if __name__ == "__main__":
     main()
