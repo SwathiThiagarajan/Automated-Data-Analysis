@@ -57,15 +57,7 @@ def generate_visualizations(df):
         plt.savefig("rating_distribution.png", dpi=300)
         plt.close()
     
-        for col in df.select_dtypes(include=[np.number]).columns[:5]:
-            plt.figure(figsize=(8,5))
-            sns.histplot(df[col].dropna(), kde=True, bins=30, color="royalblue")
-            plt.title(f"Distribution of {col}", fontsize=14)
-            plt.xlabel(col, fontsize=12)
-            plt.ylabel("Frequency", fontsize=12)
-            plt.grid(True, linestyle="--", alpha=0.6)
-            plt.savefig(f"{col}.png", dpi=300)
-            plt.close()
+
 
 def get_openai_response(prompt):
     """Send a prompt to OpenAI for AI-driven insights."""
